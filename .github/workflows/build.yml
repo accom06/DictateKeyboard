@@ -11,8 +11,16 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'tools platform-tools platforms;android-34 ndk;26.1.10909125 cmake;3.22.1'
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+      - name: Fetch sherpa-onnx native libs
+        run: bash tools/fetch-sherpa-onnx.sh
+      - name: Build bergamot translation engine (arm64)
+        run: bash tools/bergamot/build-android.sh
       - name: Build with Gradle
         run: ./gradlew assembleDebug --no-daemon
       - name: Upload APK
