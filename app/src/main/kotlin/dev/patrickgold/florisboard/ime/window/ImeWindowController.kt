@@ -170,6 +170,13 @@ class ImeWindowController(
      */
     fun updateRootInsets(newInsets: ImeInsets.Root) {
         activeRootInsets.value = newInsets
+        // Recompute the foldable/unfolded flag each time the root window changes. The foldable
+        // detection in [FoldableState] is width-based (root bounds cross 600dp = "unfolded"),
+        // which is the practical signal an IME has access to — see the docstring there for why
+        // we don't use WindowInfoTracker. Pushing into FoldableState here triggers the
+        // FoldableState.isUnfolded collector in init {}, which then flips fixedMode between
+        // THUMBS and NORMAL as needed.
+        FoldableState.updateFromInsets(newInsets)
     }
 
     /**

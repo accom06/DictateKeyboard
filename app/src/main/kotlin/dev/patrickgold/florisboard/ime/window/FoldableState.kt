@@ -16,72 +16,57 @@
 
 package dev.patrickgold.florisboard.ime.window
 
-import android.content.Context
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.window.layout.FoldingFeature
-import androidx.window.layout.WindowInfoTracker
-import androidx.lifecycle.lifecycleScope
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.width
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 /**
- * Tracks foldable device state across the IME service lifetime.
+ * Tracks whether the IME is currently rendering in a "wide" enough window to benefit from a split
+ * (THUMBS) keyboard layout. This is the practical signal we use to auto-toggle the split mode for
+ * foldables — see [updateFromInsets] for why we don't go through `androidx.window.layout.WindowInfoTracker`.
  *
- * An IME does not own a top-level window, so `WindowInfoTracker.windowLayoutInfo()`
- * is wired against the *application* context — this gives us the same FoldingFeature
- * events an Activity would see, which is what we want: when the user unfolds the
- * device (e.g. Pixel Fold, Galaxy Z Fold, Mate X), we observe the FoldingFeature
- * state change and toggle the split-keyboard mode accordingly.
+ * **Why not WindowInfoTracker?** The `FoldingFeature` API from `androidx.window.layout` only reports
+ * fold posture for windows registered with the framework's window hierarchy (Activities). An IME
+ * (`InputMethodService`) does not own such a window, so passing `applicationContext` to
+ * `WindowInfoTracker.windowLayoutInfo()` returns an empty `displayFeatures` list in practice — no
+ * FoldingFeature is ever delivered. The original install using WindowInfoTracker never fired, the
+ * keyboard never auto-split.
  *
- * The tracker is process-wide: a single Application context covers the IME service
- * for the whole app process, regardless of which Activity is currently in the foreground.
+ * **What works instead.** We watch the root window bounds (the host app's window, which the IME
+ * DOES get via `ImeInsets.Root.boundsDp`). When the user unfolds a foldable, the root window width
+ * jumps from portrait (≤480dp on a Fold's cover screen) to landscape/tabletop (~600–840dp on the
+ * inner screen). We compare the current width against a threshold ([UNFOLDED_MIN_WIDTH_DP]); above
+ * that, treat the surface as "wide enough to split". This also catches regular tablets and large
+ * landscape phones, which are exactly the same scenario from a keyboard-ergonomics standpoint — two
+ * thumbs need a split layout, period.
  *
- * @property isUnfolded True when the device is in the unfolded (flat) state. False
- *  when fully folded (closed) or when no foldable hardware is present. Folded but
- *  half-opened (tabletop / book modes) is treated as unfolded for keyboard purposes —
- *  the available surface area is large either way.
+ * The state is a [StateFlow] so the controller can collect it alongside its other configuration
+ * flows without polling.
  */
 object FoldableState {
+    /**
+     * The smallest root window width (in dp) at which we consider the keyboard surface wide enough
+     * to benefit from the THUMBS layout. 600dp matches the Android WindowSizeClass `WIDTH_DP_MEDIUM`
+     * breakpoint, which is the same threshold that triggers adaptive two-pane layouts in Compose —
+     * it's a well-known "this is no longer a phone" boundary.
+     */
+    const val UNFOLDED_MIN_WIDTH_DP = 600
+
     private val _isUnfolded = MutableStateFlow(false)
     val isUnfolded: StateFlow<Boolean> = _isUnfolded.asStateFlow()
 
-    private var installed = false
-
     /**
-     * Begin observing folding state. Idempotent — a second call is a no-op so the IME
-     * service can safely re-invoke this on every onCreate without spawning duplicate
-     * coroutines.
+     * Recompute the unfolded flag from a fresh set of root insets. Called from
+     * [ImeWindowController] each time the root window changes (orientation flip, foldable opening
+     * or closing, entering split-screen, etc.). Idempotent — repeated calls with the same width
+     * leave the flag alone.
      *
-     * @param context Any context (Application preferred). Only retained as long as the
-     *  collection is active.
-     * @param lifecycleOwner The lifecycle that bounds the collection. The IME service
-     *  passes itself here so the subscription is torn down with the service.
+     * @param rootInsets The latest root insets; we only read the width.
      */
-    fun install(context: Context, lifecycleOwner: LifecycleOwner) {
-        if (installed) return
-        installed = true
-        lifecycleOwner.lifecycleScope.launch {
-            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                WindowInfoTracker.getOrCreate(context)
-                    .windowLayoutInfo(context)
-                    .collect { info ->
-                        val folded = info.displayFeatures
-                            .filterIsInstance<FoldingFeature>()
-                            .any { feature ->
-                                // HALF_OPENED covers the "book" / "tabletop" postures where the
-                                // hinge is in the middle but the two halves are still usable as
-                                // a flat-ish surface. FLAT means fully unfolded. Anything else
-                                // (mostly just CLOSED) is treated as folded for keyboard purposes.
-                                feature.state == FoldingFeature.State.FLAT ||
-                                    feature.state == FoldingFeature.State.HALF_OPENED
-                            }
-                        _isUnfolded.value = folded
-                    }
-            }
-        }
+    fun updateFromInsets(rootInsets: ImeInsets.Root) {
+        val wide = rootInsets.boundsDp.width.value >= UNFOLDED_MIN_WIDTH_DP
+        _isUnfolded.value = wide
     }
 }
