@@ -6,23 +6,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'tools platform-tools platforms;android-34 ndk;26.1.10909125 cmake;3.22.1'
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      - name: Fetch sherpa-onnx native libs
-        run: bash tools/fetch-sherpa-onnx.sh
-      - name: Build bergamot translation engine (arm64)
-        run: bash tools/bergamot/build-android.sh
+
+      - name: Make scripts executable
+        run: |
+          chmod +x gradlew
+          chmod +x tools/*.sh || true
+
+      # Download the missing native libs
+      - name: Fetch Sherpa ONNX native libraries
+        run: ./tools/fetch-sherpa-onnx.sh
+
       - name: Build with Gradle
         run: ./gradlew assembleDebug --no-daemon
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
