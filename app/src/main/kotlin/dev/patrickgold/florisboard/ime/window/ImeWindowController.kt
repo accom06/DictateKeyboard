@@ -145,6 +145,24 @@ class ImeWindowController(
         }.collectIn(scope) { windowSpec ->
             activeWindowSpec.value = windowSpec
         }
+
+        // Auto-toggle split (THUMBS) keyboard mode on fold/unfold. When the user unfolds
+        // their foldable device we flip the active window config's fixedMode to THUMBS so
+        // the keyboard presents two thumb-reachable halves; when the device folds back up
+        // we revert to NORMAL. We mutate the active config (not the persisted preference)
+        // so the user's manual choice of COMPACT / NORMAL / THUMBS in settings is preserved
+        // — only the runtime view of the current mode shifts while the device is unfolded.
+        FoldableState.isUnfolded.collectIn(scope) { unfolded ->
+            val current = activeWindowConfig.value
+            val targetMode = if (unfolded) {
+                ImeWindowMode.Fixed.THUMBS
+            } else {
+                ImeWindowMode.Fixed.NORMAL
+            }
+            if (current.fixedMode != targetMode) {
+                activeWindowConfig.value = current.copy(fixedMode = targetMode)
+            }
+        }
     }
 
     /**

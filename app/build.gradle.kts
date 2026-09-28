@@ -249,6 +249,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.window.core)
+    implementation(libs.androidx.window)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.cache4k)
     // GIF search (Klipy): Compose image loading + animated GIF/WebP decoding + OkHttp network fetcher.
     implementation(libs.coil.compose)

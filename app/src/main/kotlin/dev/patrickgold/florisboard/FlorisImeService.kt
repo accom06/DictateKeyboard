@@ -60,6 +60,7 @@ import dev.patrickgold.florisboard.ime.landscapeinput.showsFullscreenInput
 import dev.patrickgold.florisboard.ime.lifecycle.LifecycleInputMethodService
 import dev.patrickgold.florisboard.ime.nlp.NlpInlineAutofill
 import dev.patrickgold.florisboard.ime.theme.WallpaperChangeReceiver
+import dev.patrickgold.florisboard.ime.window.FoldableState
 import dev.patrickgold.florisboard.ime.window.ImeFormFactor
 import dev.patrickgold.florisboard.ime.window.ImeRootView
 import dev.patrickgold.florisboard.ime.window.ImeWindowController
@@ -274,6 +275,9 @@ class FlorisImeService : LifecycleInputMethodService() {
         // the switch however it was made: our globe, the system picker, the notification shade. A plain
         // field tap never reaches here, because the service is already alive by then.
         dev.patrickgold.florisboard.dictate.InstantRecordingArm.arm(this)
+        // Begin observing foldable device state so the keyboard can auto-switch to
+        // split (THUMBS) mode when the user unfolds their device.
+        FoldableState.install(applicationContext, this)
         systemLocalesFlow.value = resources.configuration.locales
 
         WindowCompat.setDecorFitsSystemWindows(window.window!!, false)
